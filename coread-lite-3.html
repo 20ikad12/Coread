@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f1e8"><title>CoRead Lite</title>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+<style>
+:root{--paper:#f6f1e8;--ink:#302d29;--muted:#81796f;--line:#e3dbcf;--accent:#7c6955;--card:#fffdf9}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 system-ui,-apple-system,sans-serif}
+header{padding:14px 16px 10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px}
+h1{font-size:19px;margin:0;font-weight:650}.sub{font-size:12px;color:var(--muted)}
+main{max-width:900px;margin:auto;padding:12px}.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+button,.filebtn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:9px 12px;font-size:14px}
+button:disabled{opacity:.4}.primary{background:var(--accent);color:white;border-color:var(--accent)}
+input[type=file]{display:none}#bookTitle{font-weight:600;overflow-wrap:anywhere}
+#reader{height:min(62vh,680px);min-height:360px;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}#viewer{height:100%;width:100%}
+.status{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;padding:7px 3px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
+h2{font-size:16px;margin:0 0 9px}textarea{width:100%;min-height:90px;resize:vertical;border:1px solid var(--line);border-radius:10px;padding:11px;background:#fff;color:var(--ink);font:15px/1.5 system-ui,sans-serif}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}#notes{display:grid;gap:8px}.note{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff}
+.note small,.hint{color:var(--muted);font-size:13px}.note p{margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}.note button{padding:5px 8px;font-size:12px}
+#toc{max-width:100%;border:1px solid var(--line);border-radius:9px;padding:8px;background:#fff}
+@media(min-width:720px){main{padding:20px}.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px}#reader{height:72vh}.side .panel{margin-top:0;margin-bottom:12px}}
+</style></head><body>
+<header><div><h1>CoRead Lite</h1><div class="sub">本地 EPUB 阅读 · 个人备注 · AI 共读辅助</div></div><div class="sub">试用版 0.3</div></header>
+<main>
+<div class="toolbar"><label class="filebtn primary" for="epubFile">打开 EPUB</label><input id="epubFile" type="file" accept=".epub,application/epub+zip">
+<button id="prev" disabled>上一页</button><button id="next" disabled>下一页</button><select id="toc" disabled><option>目录</option></select></div>
+<div id="bookTitle" class="sub">请先选择手机里的 EPUB 文件</div>
+<div class="layout"><section>
+<div id="reader"><div id="viewer"></div></div>
+<div class="panel" style="margin-top:8px">
+<strong style="font-size:14px">页面标记工具</strong>
+<div class="row">
+<button id="markHighlight" disabled>荧光笔（先选中文字）</button>
+<button id="markUnderline" disabled>下划线（先选中文字）</button>
+<button id="markDraw" disabled>手绘圈选：关闭</button>
+<button id="markUndo" disabled>撤销手绘</button>
+</div>
+<p class="hint">选中文字后可添加荧光标记或下划线；开启手绘圈选后，可在书页上用手指画圈。手绘标记按当前阅读页保存。</p>
+</div>
+<div class="status"><span id="location">尚未打开书籍</span><span id="saveState">进度保存在本机</span></div>
+<section class="panel"><h2>选中原文并批注</h2><p class="hint">在正文里长按或拖动选中一句话，选中的原文会显示在这里。</p><textarea id="selectedQuote" readonly placeholder="尚未选中原文"></textarea><textarea id="noteText" placeholder="针对这句话写下想法、疑问或想讨论的内容……"></textarea>
+<div class="row"><button id="saveNote" class="primary" disabled>保存备注</button><button id="copyContext" disabled>复制本页内容 + 备注</button></div>
+<p class="hint">保存后，备注会关联到选中的原文位置。备注保存在当前浏览器。</p></section>
+</section><aside class="side">
+<section class="panel"><h2>本书备注</h2><div id="notes" class="hint">打开 EPUB 后，这里会显示本书的备注。</div></section>
+<section class="panel"><h2>AI 批注</h2><textarea id="aiText" placeholder="把 ChatGPT 的回复粘贴到这里，保存为 AI 批注。"></textarea><div class="row"><button id="saveAI" disabled>保存 AI 批注</button></div></section>
+<section class="panel"><h2>使用说明</h2><p class="hint">1. 选择 EPUB 文件开始阅读。<br>2. 翻页时自动记录阅读位置。<br>3. 写备注并保存。<br>4. 点“复制本页内容 + 备注”，发给 ChatGPT。<br>5. 把 ChatGPT 的回复粘贴到 AI 批注框保存。<br>6. 选中文字可加荧光标记/下划线，也可开启手绘圈选。</p><p class="hint">书籍、备注和手绘标记仅保存在此浏览器的本机存储中，不会上传服务器。清除浏览器数据可能导致资料丢失。</p></section>
+</aside></div></main>
+<script>
+const DB='coread-lite-db',STORE='books';let db,book,rendition,currentId='',currentLoc=null,currentTitle='',selectedQuote='',selectedCfi='',drawMode=false,drawnPaths=[];
+const $=id=>document.getElementById(id);
+function openDB(){return new Promise((ok,no)=>{let r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(STORE,{keyPath:'id'});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)})}
+function putBook(v){return new Promise((ok,no)=>{let t=db.transaction(STORE,'readwrite');t.objectStore(STORE).put(v);t.oncomplete=ok;t.onerror=()=>no(t.error)})}
+function getLastBook(){return new Promise((ok,no)=>{let t=db.transaction(STORE,'readonly');let r=t.objectStore(STORE).getAll();r.onsuccess=()=>ok((r.result||[]).sort((a,b)=>(b.lastOpened||0)-(a.lastOpened||0))[0]||null);r.onerror=()=>no(r.error)})}
+function idFor(f){return [f.name,f.size,f.lastModified].join('|')}
+function notes(){try{return JSON.parse(localStorage.getItem('notes:'+currentId)||'[]')}catch{return []}}
+function saveNotes(a){localStorage.setItem('notes:'+currentId,JSON.stringify(a));drawNotes()}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function drawNotes(){let a=notes();$('notes').innerHTML=a.length?a.slice().reverse().map(n=>`<article class="note"><small>${n.kind==='ai'?'AI 批注':'我的备注'} · ${esc(n.label)}</small>${n.quote?`<p><strong>原文：</strong>${esc(n.quote)}</p>`:''}<p>${esc(n.text)}</p><div class="row"><button onclick="jumpTo('${encodeURIComponent(n.cfi||'')}')">回到位置</button><button onclick="removeNote('${n.id}')">删除</button></div></article>`).join(''):'还没有备注。'}
+window.jumpTo=c=>{if(c&&rendition)rendition.display(decodeURIComponent(c))};window.removeNote=id=>saveNotes(notes().filter(n=>n.id!==id));
+function pageText(){try{return rendition.getContents().map(c=>c.document.body?.innerText||'').join('\n').trim()}catch{return ''}}
+function label(){return currentLoc?.start?.displayed?`第 ${currentLoc.start.displayed.page} 页`:'当前阅读位置'}
+function pageKey(){return currentId+'|'+(currentLoc?.start?.cfi||'start')}
+function savedPaths(){try{return JSON.parse(localStorage.getItem('drawings:'+currentId)||'[]')}catch{return []}}
+function storePaths(a){localStorage.setItem('drawings:'+currentId,JSON.stringify(a))}
+function setupDrawingLayers(){
+  for(const c of rendition.getContents()){
+    const doc=c.document, win=c.window;
+    if(!doc||doc.getElementById('coread-draw-layer'))continue;
+    const svg=doc.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('id','coread-draw-layer');
+    Object.assign(svg.style,{position:'fixed',inset:'0',width:'100%',height:'100%',zIndex:'99999',pointerEvents:drawMode?'auto':'none',touchAction:'none'});
+    svg.setAttribute('viewBox',`0 0 ${win.innerWidth} ${win.innerHeight}`);
+    doc.body.appendChild(svg);
+    const render=()=>{svg.innerHTML='';for(const item of savedPaths().filter(x=>x.key===pageKey())){const path=doc.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',item.d);path.setAttribute('fill','none');path.setAttribute('stroke','#d44b36');path.setAttribute('stroke-width','3');path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');svg.appendChild(path)}};
+    render();
+    let active=null;
+    svg.addEventListener('pointerdown',e=>{if(!drawMode)return;e.preventDefault();svg.setPointerCapture(e.pointerId);active={key:pageKey(),d:`M ${e.clientX} ${e.clientY}`};});
+    svg.addEventListener('pointermove',e=>{if(!active||!drawMode)return;e.preventDefault();active.d+=` L ${e.clientX} ${e.clientY}`;renderTemp();});
+    const finish=()=>{if(!active)return;const all=savedPaths();all.push(active);storePaths(all);active=null;render()};
+    svg.addEventListener('pointerup',finish);svg.addEventListener('pointercancel',finish);
+    function renderTemp(){svg.innerHTML='';for(const item of [...savedPaths().filter(x=>x.key===pageKey()),...(active?[active]:[])]){const path=doc.createElementNS('http://www.w3.org/2000/svg','path');path.setAttribute('d',item.d);path.setAttribute('fill','none');path.setAttribute('stroke','#d44b36');path.setAttribute('stroke-width','3');path.setAttribute('stroke-linecap','round');path.setAttribute('stroke-linejoin','round');svg.appendChild(path)}}
+    c.coreadRender=render;
+  }
+  document.querySelectorAll('#viewer iframe').forEach(f=>{try{const svg=f.contentDocument?.getElementById('coread-draw-layer');if(svg)svg.style.pointerEvents=drawMode?'auto':'none'}catch{}});
+}
+function bindSelection(){rendition.on('selected',(cfiRange,contents)=>{try{const sel=contents.window.getSelection();const quote=(sel?.toString()||'').trim();if(!quote)return;selectedQuote=quote;selectedCfi=cfiRange;$('selectedQuote').value=quote;}catch(e){console.warn('读取选中文字失败',e)}})}
+function relocated(loc){currentLoc=loc;$('location').textContent=loc?.start?.displayed?`第 ${loc.start.displayed.page} / ${loc.start.displayed.total} 页`:'阅读位置已更新';if(currentId){localStorage.setItem('progress:'+currentId,loc.start.cfi);$('saveState').textContent='进度已保存'}}
+async function load(file,id){if(book)try{book.destroy()}catch{}currentId=id;currentTitle=file.name;$('bookTitle').textContent=file.name;$('viewer').innerHTML='';
+book=ePub(file);rendition=book.renderTo('viewer',{width:'100%',height:'100%',flow:'paginated',spread:'none'});
+rendition.themes.default({'body':{'font-family':'system-ui,sans-serif','color':'#302d29','line-height':'1.8','padding':'0 5px'},'p':{'margin':'0 0 1em'}});
+await rendition.display(localStorage.getItem('progress:'+id)||undefined);rendition.on('relocated',loc=>{relocated(loc);setTimeout(setupDrawingLayers,150)});bindSelection();setTimeout(setupDrawingLayers,300);
+['prev','next','saveNote','copyContext','saveAI','toc','markHighlight','markUnderline','markDraw','markUndo'].forEach(x=>$(x).disabled=false);
+$('toc').innerHTML='<option value="">目录</option>';let nav=await book.loaded.navigation;
+function add(items,p=''){for(let item of items||[]){let o=document.createElement('option');o.value=item.href;o.textContent=p+item.label;$('toc').appendChild(o);if(item.subitems)add(item.subitems,p+'　')}}add(nav.toc);drawNotes()}
+$('epubFile').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{db=await openDB();await putBook({id:idFor(f),name:f.name,blob:f,lastOpened:Date.now()});await load(f,idFor(f))}catch(err){alert('打开失败：'+err.message)}};
+$('prev').onclick=()=>rendition?.prev();$('next').onclick=()=>rendition?.next();$('toc').onchange=()=>{if($('toc').value)rendition.display($('toc').value)};
+$('saveNote').onclick=()=>{let t=$('noteText').value.trim();if(!t)return;let a=notes();a.push({id:crypto.randomUUID(),kind:'user',text:t,quote:selectedQuote,cfi:selectedCfi||currentLoc?.start?.cfi||'',label:label(),created:Date.now()});saveNotes(a);$('noteText').value=''};
+$('markHighlight').onclick=()=>{if(!selectedCfi){alert('请先在书页中选中一段文字');return}rendition.annotations.add('highlight',selectedCfi,{},()=>{},'user-highlight');};
+$('markUnderline').onclick=()=>{if(!selectedCfi){alert('请先在书页中选中一段文字');return}rendition.annotations.add('underline',selectedCfi,{},()=>{},'user-underline');};
+$('markDraw').onclick=()=>{drawMode=!drawMode;$('markDraw').textContent='手绘圈选：'+(drawMode?'开启':'关闭');setupDrawingLayers();document.querySelectorAll('#viewer iframe').forEach(f=>{try{const svg=f.contentDocument?.getElementById('coread-draw-layer');if(svg)svg.style.pointerEvents=drawMode?'auto':'none'}catch{}})};
+$('markUndo').onclick=()=>{const a=savedPaths();const i=a.map(x=>x.key).lastIndexOf(pageKey());if(i>=0){a.splice(i,1);storePaths(a);setupDrawingLayers()}};
+$('saveAI').onclick=()=>{let t=$('aiText').value.trim();if(!t)return;let a=notes();a.push({id:crypto.randomUUID(),kind:'ai',text:t,cfi:currentLoc?.start?.cfi||'',label:label(),created:Date.now()});saveNotes(a);$('aiText').value=''};
+$('copyContext').onclick=async()=>{let t=`书名：${currentTitle}\n位置：${label()}\n\n【当前页面内容】\n${pageText()}\n\n【本书备注】\n${notes().map(n=>`[${n.kind==='ai'?'AI批注':'我的备注'} | ${n.label}]\n${n.text}`).join('\n\n')}\n\n请结合原文和我的备注进行讨论，区分原文、我的观点与推测。`;try{await navigator.clipboard.writeText(t);alert('已复制，可以粘贴到 ChatGPT。')}catch{let x=document.createElement('textarea');x.value=t;document.body.appendChild(x);x.select();document.execCommand('copy');x.remove();alert('已尝试复制，请粘贴到 ChatGPT。')}};
+(async()=>{try{
+ db=await openDB();
+ const saved=await getLastBook();
+ if(saved?.blob){
+   const restored=new File([saved.blob],saved.name||'上次阅读的书.epub',{type:'application/epub+zip'});
+   await load(restored,saved.id);
+   $('saveState').textContent='已恢复上次阅读的书';
+ }
+}catch(err){console.warn('恢复上次阅读失败',err);$('saveState').textContent='未能自动恢复，请重新选择 EPUB'}})();
+</script></body></html>
